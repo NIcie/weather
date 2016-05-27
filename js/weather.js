@@ -3,29 +3,29 @@ function toggleUnits(unitsCur, valueCur) {
   var newUnits;
   // Для перевода температуры из шкалы Фаренгейта в шкалу Цельсия нужно от исходного числа отнять 32 и умножить результат на 5/9. 
   // Для перевода температуры из шкалы Цельсия в шкалу Фаренгейта нужно умножить исходное число на 9/5 и прибавить 32
-  if ( document.getElementById("unitsCheck").checked ) {
+  if ( unitsCur === "imperial") {
     newUnits = "metric";
-    temperature = Math.round(( valueCur - 32) * 5/9 * 100 ) / 100;
+    temperature = Math.round((valueCur - 32) * 5 / 9 * 100) / 100;
   } else {
     newUnits = "imperial";
-    temperature = Math.round( (valueCur * 9/5 + 32) * 100) / 100;
+    temperature = Math.round((valueCur * 9 / 5 + 32) * 100) / 100;
   }
   setUnits(newUnits, temperature);
 }
 
 function setUnits(unitsInner, temperature) {
   if (unitsInner === "imperial") {
-    $("#tempUnit").html( (temperature !== "") ? "&deg;F" :"");  
-    $("#tempValue").html( temperature);  
+    $("#tempUnit").html((temperature !== "") ? "&deg;F" : "");
+    $("#tempValue").html(temperature);
   } else {
-    $("#tempUnit").html( (temperature !== "") ? "&deg;C" :"");  
-    $("#tempValue").html( temperature);  
+    $("#tempUnit").html((temperature !== "") ? "&deg;C" : "");
+    $("#tempValue").html(temperature);
   }
 }
 
 function getUnits() {
   var unitsIn = 'metric'; // Celsius
-  if( document.getElementById("unitsCheck").checked ) 
+  if ($("#unitsCheck").prop("checked"))
     unitsIn = 'imperial'; // if checked - Farenheit
   return unitsIn;
 }
@@ -36,33 +36,34 @@ function getWeather(lat, lon) {
   var xhttp;
   if (window.XMLHttpRequest) {
     xhttp = new XMLHttpRequest();
-  } else { 
+  } else {
     // code for IE6, IE5
     xhttp = new ActiveXObject("Microsoft.XMLHTTP");
   }
   xhttp.onreadystatechange = function() {
     if (xhttp.readyState == 4 && xhttp.status == 200) {
-        checkResult(xhttp);
-//        var obj = JSON.parse(xhttp.responseText); 
+      checkResult(xhttp);
+      //        var obj = JSON.parse(xhttp.responseText); 
     }
-  };    
+  };
   xhttp.open("GET", APIurl, true);
-  xhttp.send();     
+  xhttp.send();
 };
 
 function checkResult(request) {
   var output = document.getElementById("out");
   output.innerHTML = "";
   var obj = JSON.parse(request.responseText);
-  $("#town-name").html(obj.name);  
+  $("#town-name").html(obj.name);
   $("#temp").html("Temperature ");
   var unit = getUnits();
   setUnits(unit, obj.main.temp);
   //$("#tempUnit").html("&deg;" + ((unit === "metric") ? "C" : "F"));
   $("#sky").html(obj.weather[0].main);
   $("#wind").html("Wind speed " + obj.wind.speed + " meter/sec");
-  
+
   var img = new Image();
+
   img.src = "http://openweathermap.org/img/w/" + obj.weather[0].icon + ".png";
   output.appendChild(img);
   var backgrounds = {};
@@ -85,41 +86,78 @@ function checkResult(request) {
   backgrounds["50n"] = "mist";
   backgrounds["50d"] = "mist";
   $("body").css("background", "url(\"http://niciedomen.esy.es/weather/img/" + backgrounds[obj.weather[0].icon] + ".jpg\") no-repeat fixed center");
-  $("body").css("background-size", "cover"); 
+  $("body").css("background-size", "cover");
 }
 
+function apiGeolocationSuccess(position) {
+  getWeather(position.coords.latitude, position.coords.longitude);
+};
+
+function tryAPIGeolocation() {
+  // https://jsfiddle.net/gogs/jwt9f1o3/
+	jQuery.post( "https://www.googleapis.com/geolocation/v1/geolocate?key=AIzaSyAVzYnepkgixhdC0xe8dAnoVst1t5F7yKQ", function(success) {
+		apiGeolocationSuccess(
+      {coords: {latitude: success.location.lat, longitude: success.location.lng}}
+    );
+  })
+  .fail(function(err) {
+    var output = $("#out");
+    output.innerHTML = "API Geolocation error! \n\n"+err;
+  });
+};
+
+function browserGeolocationSuccess(position) {
+  getWeather(position.coords.latitude, position.coords.longitude);
+};
+
+function browserGeolocationFail(error) {
+  var output = $("#out");
+  switch (error.code) {
+    case error.TIMEOUT:
+      output.innerHTML = "Browser geolocation error !\n\nTimeout.";
+      break;
+    case error.PERMISSION_DENIED:
+      if(error.message.indexOf("Only secure origins are allowed") == 0) {
+        tryAPIGeolocation();
+      }
+      break;
+    case error.POSITION_UNAVAILABLE:
+      output.innerHTML = "Browser geolocation error !\n\nPosition unavailable.";
+      break;
+  }
+  output.innerHTML = "Sorry, unable to retrieve your location";
+};
+
 function findGeo() {
-  var output = document.getElementById("out");
+  var output = $("#out");
   if (!navigator.geolocation) {
     output.innerHTML = "Sorry, geolocation is not supported by your browser";
     return;
   }
-
-  function success(position) {
-    var latitude = position.coords.latitude;
-    var longitude = position.coords.longitude;
-    getWeather(latitude, longitude);
-  };
-
-  function error() {
-    output.innerHTML = "Sorry, unable to retrieve your location";
-  };
+  navigator.geolocation.getCurrentPosition(
+    browserGeolocationSuccess,
+    browserGeolocationFail,
+    { maximumAge: 50000, timeout: 20000, enableHighAccuracy: true }
+  );
+  
   output.innerHTML = "Locating…";
-
-  navigator.geolocation.getCurrentPosition(success, error);
 };
 
 $(document).ready(function() {
-  $("#unitsCheck").prop( "checked", false ); // metric - Celsius, not checked
-  // $("#showWeather").click(function() {
-    var now = new Date();
-    $("#curDate").html(now.toDateString());
-    $("#curTime").html(now.getHours() + ":" + now.getMinutes());
-    findGeo();
-  //});
-  
+  $("#unitsCheck").prop("checked", false); // metric - Celsius, not checked
+  var now = new Date();
+  $("#curDate").html(now.toDateString());
+  $("#curTime").html(now.getHours() + ":" + now.getMinutes());
+  findGeo();
+
   $("#switch").click(function() {
-    var unit = getUnits();
-    toggleUnits(unit, $("#tempValue").html());
+    if( $("#tempValue").text() !== "" ) { 
+      var unit = getUnits(); // если удалось определить точку, в которой надо определять погоду
+      toggleUnits(unit, $("#tempValue").html());
+    }
+    else {
+      alert("Sorry, your location is anavailavle, so the weather is unknown.");
+      return false;
+    }
   });
 });
